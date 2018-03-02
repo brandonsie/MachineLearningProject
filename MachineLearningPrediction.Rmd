@@ -1,0 +1,67 @@
+---
+title: "MachineLearningPrediction"
+author: "Brandon Sie"
+date: "March 2, 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+##Overview
+This project uses fitness tracker accelerometer data from http://groupware.les.inf.puc-rio.br/har. My goal is to use the training dataset to generate a model to predict the the manner in which fitness activities were performed in the testing dataset. This data includes accelerometers on the belt, forearm, arm, and dumbell for 6 participants.
+
+<!-- TOTAL TEXT LESS THAN 2000 WORDS. NUMBER OF FIGURES LESS THAN 5. -->
+<!-- Submit link to github repo with RMD and compiled HTML file. Prefer use gh-pages branch so HTML page can be viewed online -->
+
+```{r, warning=FALSE,message=FALSE}
+library(data.table)
+library(caret)
+library(randomForest)
+```
+
+
+First load the data.
+```{r}
+if(!file.exists("pml-training.csv")) download.file("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv","pml-training.csv")
+if(!file.exists("pml-testing.csv")) download.file("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv","pml-testing.csv")
+
+training <- fread("pml-training.csv",data.table=FALSE,na.strings=c("NA",""))
+testing <- fread("pml-testing.csv",data.table=FALSE,na.strings=c("NA",""))
+
+```
+
+I calculate the number of NA values in each column and ignore variables like "user_name" that probably don't have much predictive power, and also variables with no data. To improve processing time, I take a subset of the remaining data.
+```{r}
+
+#Ignore non-accelerometer first 7 columns
+trainingClean <- training[,-c(1:7)]
+testingClean <- testing[,-c(1:7)]
+
+#Ignore NAs
+numNA <- apply(trainingClean,MARGIN=2,FUN=function(x) sum(is.na(x)))
+trainingClean <- trainingClean[,numNA==0]
+testingClean <- testingClean[,numNA==0]
+
+trainingClean$classe <- as.factor(trainingClean$classe)
+
+set.seed(1000)
+sub <- createDataPartition(trainingClean$classe,p=0.1,list=FALSE)
+trainingUse <- trainingClean[sub,]
+```
+
+I use a random forest model to predict performance (variable "classe" in the data) using all other variables as predictors. By default random forest performs some cross validation.
+```{r}
+pmlFitRF <- train(classe~.,data=trainingUse,method="rf")
+pmlFitRF$finalModel
+```
+We see that this model has an OOB (out of bag / out of sample) error rate estimate of 5.14% based on the random forest model.
+
+Now assess how well this model performs with the testing data.
+```{r}
+pmlPredictRF <- predict(pmlFitRF$finalModel,testingClean)  
+pmlPredictRF
+```
+This prediction model scores 17/20 correctly (85%) according to the quiz, suggesting around a 15% out of sample error rate.
+
